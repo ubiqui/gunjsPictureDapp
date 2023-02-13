@@ -1,0 +1,300 @@
+<h1>GUNjs Picture Test Tool</h1>
+Available Users:
+<div id="users"></div>
+<br>
+<div id="sign">
+  Login, Register or Delete User<br>
+  <input id="alias" placeholder="username">
+  <input id="pass" type="password" placeholder="passphrase">
+  <input id="login" type="button" value="Login">
+  <input id="up" type="button" value="Register">
+  <input id="delUsr" type="button" value="Delete">
+</div>
+
+<div id="currentUser"></div>
+<div id="said" style="display: none;" >
+	<input type="button" id="loadFile" value="Select a directory with pictures"onclick="document.getElementById('fileInput').click();" />
+	<input type="file" id="fileInput" multiple directory webkitdirectory style="display:none;" />
+	<input id="del" type="button" value="Delete all pictures">
+	<input id="delOne" type="button" value="Delete a picture">
+	<input id="logOut" type="button" value="Logout">
+</div>
+<br>
+<div id="images"></div>
+
+<script src="https://code.jquery.com/jquery-1.12.4.js" integrity="sha256-Qw82+bXyGq6MydymqBxNPYTaUXXq7c8v3CwiYwLLNXU="  crossorigin="anonymous"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/nts.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/radix.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/radisk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/store.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/rindexed.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/webrtc.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/path.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/open.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/load.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/not.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/unset.js"></script>-->
+
+<script src="../gun/gun.js"></script>
+<script src="../gun/sea.js"></script>
+<script src="../gun/nts.js"></script>
+<script src="../gun/lib/utils.js"></script>
+<script src="../gun/lib/radix.js"></script>
+<script src="../gun/lib/radisk.js"></script>
+<script src="../gun/lib/store.js"></script>
+<script src="../gun/lib/rindexed.js"></script>
+<script src="../gun/lib/webrtc.js"></script>
+<script src="../gun/lib/path.js"></script>
+<script src="../gun/lib/open.js"></script>
+<script src="../gun/lib/load.js"></script>
+<script src="../gun/lib/not.js"></script>
+<!-- <script src="../gun/lib/unset.js"></script> -->
+
+<script>
+
+var gun =  Gun({
+      localStorage: false,
+      peers: [location.origin + '/gun'],
+	  chunk: (1024 * 1024 * 3) // 3MB
+    });
+var user = gun.user();
+
+
+function clearDisplay(){
+	var images = document.getElementById('images');
+	while (images.firstChild) {
+		images.removeChild(images.firstChild);
+	}
+	var users = document.getElementById('users');
+	while (users.firstChild) {
+		users.removeChild(users.firstChild);
+	}
+}
+
+function pics(pics){
+	this.back().get('alias').once((alias)=>{
+		var usr = document.getElementById(alias);
+		if(!usr){
+			usr = window.document.createElement('div');
+			usr.id = alias;
+			var images = document.getElementById('images');
+			images.appendChild(usr);
+		}
+		let i=0;
+		for(var key in pics){
+			if(pics[key])
+				i++;
+		}
+		usr.innerHTML = i +' Public pictures of '+alias+': <br>';
+		
+		for(var key in pics){
+			let img = null;
+			// find existing child image
+			for(let cn of usr.childNodes){
+				if(cn.dataset && cn.dataset.gunKey === key){
+					img = cn;
+					break;
+				}
+			}
+			if( pics[key] === null){
+				if(img !== null){
+					usr.removeChild(img);
+				}
+			}else if(img === null){
+				var image = window.document.createElement('img');
+				if(pics[key].img){
+					image.dataset.gunKey = key;
+					usr.appendChild(image);
+					image.src = pics[key].img;
+				}
+			}
+		}
+	});
+};
+
+function showUsersContent(){
+	gun.get('usrs').open(async (pubUsers)=>{
+		//setTimeout(()=>{
+			clearDisplay();
+			var users = document.getElementById('users');
+			for(var key in pubUsers){
+				if(pubUsers[key] && pubUsers[key].alias){
+					var usr = window.document.createElement('div');
+					usr.innerHTML = pubUsers[key].alias;
+					users.appendChild(usr);
+				}
+				if(pubUsers[key] && pubUsers[key].pub){
+					gun.user(pubUsers[key].pub).get('pictures').open(pics);
+					gun.user(pubUsers[key].pub).get('pictures').on((p)=>{
+						console.log('on',p);
+					});
+				}
+			};
+		//},500);
+	});
+}; showUsersContent();
+
+$('#up').on('click', function(e){
+  user.create($('#alias').val(), $('#pass').val(), async (ack) => {
+	if (!ack.err) {
+	  await gun.get('usrs').set({ alias:$('#alias').val(), pub: ack.pub }).then();
+	  user.auth($('#alias').val(), $('#pass').val(), (res)=>{
+		if(!res.err){
+		  user.get('pictures').set(null);
+		}
+	  });
+	}
+  });
+});
+
+$('#del').on('click', async (e)=>{
+	await user.get( 'pictures' ).once(async (val) => { 
+		for(let v in val){
+			if(val[v] !== null && v !== '_'){
+				user.get( 'pictures').get(v).put(null);
+			}
+		}
+	} ).then();
+});
+
+$('#delOne').on('click', async(e)=>{
+	await user.get( 'pictures' ).once(async (val) => { 
+		for(let v in val){
+			if(val[v] !== null && v !== '_'){
+				user.get( 'pictures').get(v).put(null);
+				break;
+			}
+		}
+	} ).then();
+});
+
+$('#delUsr').on('click', async(e)=>{
+	gun.get('usrs').load( (usrs) =>{
+		for(let u in usrs){
+			if(usrs[u] && $('#alias').val()=== usrs[u].alias){
+				gun.get('usrs').get(u).put(null);
+				
+			}
+		}
+	});
+
+	await user.delete($('#alias').val(), $('#pass').val(),  (ack) => {
+		if(!ack.err){
+			$('#sign').css("display", "block");
+		}
+	}).then();
+	user.leave();
+});
+
+$('#logOut').on('click', ()=>{
+	user.leave();
+	user = gun.user();
+	$('#said').hide();
+	$('#sign').css("display", "block");
+	var usr = document.getElementById('currentUser');
+	usr.innerHTML = "";
+});
+
+
+async function login(e){
+	await user.auth($('#alias').val(), $('#pass').val()).then();
+  return false; // e.preventDefault();
+};
+$('#login').on('click', ()=>{
+	user.auth($('#alias').val(), $('#pass').val());
+});
+
+
+gun.on('auth', function(){
+	$('#sign').hide();
+	$('#said').css("display", "block");
+	var usr = document.getElementById('currentUser');
+	usr.innerHTML = 'Current User: ' +$('#alias').val();
+});
+
+
+document.getElementById('fileInput').addEventListener('change', async(e)=>{
+	for (let file of e.srcElement.files) {
+        //let url = URL.createObjectURL(file);
+		//const img512 = await imgToBlob(url, 512, 512);
+		if(file.name.startsWith('.')){
+			continue;
+		}
+		const img512 = await fileToBlob(file, 64, 64);
+		if(img512){
+			let timestamp = Date.now();
+			let data = {img:img512, timestamp};
+			await user.get('pictures').get(timestamp).put(data).then();
+		}
+    }
+	// workaround for missing tigger :-(
+	//await user.get('pictures').get('trigger').put('dummy').then();
+	//await user.get('pictures').get('trigger').put(null).then();
+}, false);
+
+async function imgToBlob(data, w, h) {
+	return new Promise((resolve) => {
+	  var image = window.document.createElement('img');
+	  
+	  image.onload = (evt) => {
+		var canvas = window.document.createElement('canvas'), ctx = canvas.getContext('2d');
+		canvas.width = w;
+		canvas.height = h;
+		if (image.width < image.height) {
+		  var a = image.width / image.height;
+		  var nw = w * a;
+		  var x = ((w - nw) / 2);
+		  ctx.drawImage(image, x, 0, nw, h);
+		} else {
+		  var a = image.height / image.width;
+		  var nh = h * a;
+		  var y = ((h - nh) / 2);
+		  ctx.drawImage(image, 0, y, w, nh);
+		}
+		resolve(canvas.toDataURL("image/png"));
+	  };
+	  image.src = data;
+	});
+};
+
+async function fileToBlob(data, w, h) {
+  return new Promise((resolve) => {
+	try{
+		var reader = new FileReader();
+		reader.onload = function(event){
+		var img = window.document.createElement('img')
+		if(event.target.result){
+			img.onload = function(e){
+				var canvas = window.document.createElement('canvas'), ctx = canvas.getContext('2d');
+				canvas.width = w;
+				canvas.height = h;
+				if (img.width < img.height) {
+				var a = img.width / img.height;
+				var nw = w * a;
+				var x = ((w - nw) / 2);
+				ctx.drawImage(img, x, 0, nw, h);
+				} else {
+				var a = img.height / img.width;
+				var nh = h * a;
+				var y = ((h - nh) / 2);
+				ctx.drawImage(img, 0, y, w, nh);
+				}
+				resolve(canvas.toDataURL("image/png"));
+			};
+			img.src = event.target.result;
+		}else{
+			resolve(null);
+		}
+		};
+		reader.readAsDataURL(data);  
+	}catch(ex){
+		resolve(null);
+	}   
+  });
+};
+
+
+
+</script>
